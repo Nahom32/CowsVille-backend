@@ -293,8 +293,8 @@ class Reproduction(SoftDeleteModel):
 
     class Meta:
         ordering = [
-            "-heat_sign_recorded_at"
-        ]  # Order by most recent heat sign records first
+            models.F("heat_sign_recorded_at").desc(nulls_last=True)
+        ]  # Order by most recent heat sign, but keep empty ones (nulls) at the bottom!
 
 
 class Message(SoftDeleteModel):
