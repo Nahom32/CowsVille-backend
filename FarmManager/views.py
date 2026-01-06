@@ -895,6 +895,7 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
                     cow=cow,
                     inseminator=cow.farm.inseminator,
                     is_inseminated=validated_data["is_inseminated"],
+                    date_of_insemination=validated_data.get("date_of_insemination"),
                     insemination_count=validated_data["insemination_count"],
                     lactation_number=validated_data["lactation_number"],
                 )
