@@ -422,6 +422,7 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
         """Create reproduction record for the cow"""
         medical_fields = serializer.context.get("medical_fields", {})
         reproduction_fields = serializer.context.get("reproduction_fields", {})
+        heat_fields = serializer.context.get("heat_fields", {})
 
         # Convert is_pregnant from yes/no to boolean if present
         is_pregnant = ValidationService.convert_yes_no_to_boolean(
@@ -435,9 +436,9 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
             is_cow_pregnant=is_pregnant,
             pregnancy_date=serializer.validated_data.get("last_date_insemination"),
             calving_date=serializer.validated_data.get("last_calving_date"),
-            heat_sign_start=serializer.validated_data.get("heat_start_date", None),
-            heat_sign_end=serializer.validated_data.get("heat_end_date", None),
-            heat_signs_seen=serializer.validated_data.get("heat_signs", None),
+            heat_sign_start=heat_fields.get("heat_start_date", None),
+            heat_sign_end=heat_fields.get("heat_end_date", None),
+            heat_signs_seen=heat_fields.get("heat_signs", None),
         )
         self.log_operation_success(
             "created reproduction record", f"for cow {cow.cow_id}"

@@ -512,12 +512,19 @@ class CowCreateUpdateSerializer(serializers.ModelSerializer):
             if "is_pregnant" in validated_data:
                 reproduction_fields["is_pregnant"] = validated_data.pop("is_pregnant")
 
+            # Extract heat sign fields (belong to Reproduction, not Cow model)
+            heat_fields = {}
+            for field in ["heat_start_date", "heat_end_date", "heat_signs"]:
+                if field in validated_data:
+                    heat_fields[field] = validated_data.pop(field)
+
             # Create the cow instance with only valid Cow model fields
             instance = super().create(validated_data)
 
             # Save extracted data in view's perform_create method
             self.context["medical_fields"] = medical_fields
             self.context["reproduction_fields"] = reproduction_fields
+            self.context["heat_fields"] = heat_fields
 
             return instance
         except Farm.DoesNotExist:
