@@ -418,6 +418,62 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
             )
             raise
 
+    def perform_update(self, serializer):
+        """Override perform_update to handle reproduction and medical side-effects"""
+        try:
+            with transaction.atomic():
+                cow = serializer.save()
+                self.log_operation_success(
+                    "updated cow", f"{cow.cow_id} for farm {cow.farm.farm_id}"
+                )
+
+                # Check if reproduction fields were sent in the update
+                reproduction_fields = serializer.context.get("reproduction_fields", {})
+                heat_fields = serializer.context.get("heat_fields", {})
+
+                if reproduction_fields or heat_fields:
+                    self._update_reproduction_record(cow, serializer)
+
+        except Exception as e:
+            self.log_operation_error(
+                "updating cow with side-effect records", e
+            )
+            raise
+
+    def _update_reproduction_record(self, cow, serializer):
+        """Update or create reproduction record during cow update"""
+        reproduction_fields = serializer.context.get("reproduction_fields", {})
+        heat_fields = serializer.context.get("heat_fields", {})
+
+        # Get or create reproduction record for this cow
+        reproduction, created = Reproduction.objects.get_or_create(
+            cow=cow,
+            farm=cow.farm,
+            defaults={"is_cow_pregnant": False},
+        )
+
+        # Update pregnancy status if provided
+        if "is_pregnant" in reproduction_fields:
+            is_pregnant = ValidationService.convert_yes_no_to_boolean(
+                reproduction_fields["is_pregnant"]
+            )
+            reproduction.is_cow_pregnant = is_pregnant
+
+        # Update heat sign fields if provided
+        if "heat_start_date" in heat_fields:
+            reproduction.heat_sign_start = heat_fields["heat_start_date"]
+        if "heat_end_date" in heat_fields:
+            reproduction.heat_sign_end = heat_fields["heat_end_date"]
+        if "heat_signs" in heat_fields:
+            reproduction.heat_signs_seen = heat_fields["heat_signs"]
+
+        reproduction.save()
+
+        action = "created" if created else "updated"
+        self.log_operation_success(
+            f"{action} reproduction record", f"for cow {cow.cow_id}"
+        )
+
     def _create_reproduction_record(self, cow, serializer):
         """Create reproduction record for the cow"""
         medical_fields = serializer.context.get("medical_fields", {})

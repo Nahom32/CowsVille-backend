@@ -534,6 +534,51 @@ class CowCreateUpdateSerializer(serializers.ModelSerializer):
         except Exception as e:
             raise serializers.ValidationError(f"Error creating cow: {str(e)}")
 
+    def update(self, instance, validated_data):
+        """Update cow and extract side-effect fields into context"""
+        # Pop farm_id and cow_id if present (not updatable)
+        validated_data.pop("farm_id", None)
+        validated_data.pop("cow_id", None)
+
+        # Extract non-Cow model fields for side-effect handling
+        medical_fields = {}
+        reproduction_fields = {}
+
+        # Fields for Medical Assessment
+        for field in [
+            "has_lameness",
+            "reproductive_health",
+            "metabolic_disease",
+            "is_vaccinated",
+            "vaccination_date",
+            "vaccination_type",
+            "deworming_date",
+            "deworming_type",
+            "has_deworming",
+        ]:
+            if field in validated_data:
+                medical_fields[field] = validated_data.pop(field)
+
+        # Fields for Reproduction
+        if "is_pregnant" in validated_data:
+            reproduction_fields["is_pregnant"] = validated_data.pop("is_pregnant")
+
+        # Extract heat sign fields (belong to Reproduction, not Cow model)
+        heat_fields = {}
+        for field in ["heat_start_date", "heat_end_date", "heat_signs"]:
+            if field in validated_data:
+                heat_fields[field] = validated_data.pop(field)
+
+        # Update the cow instance with only valid Cow model fields
+        instance = super().update(instance, validated_data)
+
+        # Save extracted data for view's perform_update method
+        self.context["medical_fields"] = medical_fields
+        self.context["reproduction_fields"] = reproduction_fields
+        self.context["heat_fields"] = heat_fields
+
+        return instance
+
 
 class DoctorSerializer(BasePhoneNumberMixin, serializers.ModelSerializer):
     class Meta:
