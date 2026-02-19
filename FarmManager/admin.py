@@ -9,8 +9,51 @@ from .models import (BreedType, Cow, Doctor, Farm, FarmerMedicalReport,
 # from unfold.admin import ModelAdmin
 
 
+# --- Base Admin for Soft Delete Models ---
+class SoftDeleteAdmin(admin.ModelAdmin):
+    """Base admin class for models using SoftDeleteModel.
+    Shows all records (including soft-deleted), adds is_deleted to display/filter,
+    and provides bulk hard-delete and restore actions.
+    """
+    select_related_fields = []
+
+    def get_queryset(self, request):
+        """Show all records including soft-deleted ones"""
+        return self.model.objects.all_with_deleted().select_related(
+            *self.select_related_fields
+        )
+
+    def get_list_display(self, request):
+        """Append is_deleted to list_display"""
+        base = list(super().get_list_display(request))
+        if "is_deleted" not in base:
+            base.append("is_deleted")
+        return base
+
+    def get_list_filter(self, request):
+        """Append is_deleted to list_filter"""
+        base = list(super().get_list_filter(request))
+        if "is_deleted" not in base:
+            base.append("is_deleted")
+        return base
+
+    @admin.action(description="Hard delete selected (permanent)")
+    def hard_delete_selected(self, request, queryset):
+        count = queryset.count()
+        for obj in queryset:
+            obj.hard_delete()
+        self.message_user(request, f"Permanently deleted {count} record(s).")
+
+    @admin.action(description="Restore selected (undo soft delete)")
+    def restore_selected(self, request, queryset):
+        count = queryset.filter(is_deleted=True).update(is_deleted=False)
+        self.message_user(request, f"Restored {count} record(s).")
+
+    actions = ["hard_delete_selected", "restore_selected"]
+
+
 @admin.register(Farm)
-class FarmAdmin(admin.ModelAdmin):
+class FarmAdmin(SoftDeleteAdmin):
     list_display = (
         "farm_id",
         "owner_name",
@@ -20,29 +63,18 @@ class FarmAdmin(admin.ModelAdmin):
     )
     search_fields = ("farm_id", "owner_name", "address")
     list_filter = ("type_of_housing", "type_of_floor", "source_of_water")
-
-    # Optimize queries to prevent N+1 problem
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related(
-            "doctor",
-            "inseminator",
-            "type_of_housing",
-            "type_of_floor",
-            "source_of_water",
-        )
+    select_related_fields = [
+        "doctor", "inseminator", "type_of_housing",
+        "type_of_floor", "source_of_water",
+    ]
 
 
 @admin.register(Cow)
-class CowAdmin(admin.ModelAdmin):
+class CowAdmin(SoftDeleteAdmin):
     list_display = ("cow_id", "farm", "breed", "date_of_birth", "sex")
     search_fields = ("cow_id", "farm__farm_id")
     list_filter = ("breed", "sex", "gynecological_status")
-
-    # Optimize queries to prevent N+1 problem
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related("farm", "breed", "gynecological_status")
+    select_related_fields = ["farm", "breed", "gynecological_status"]
 
 
 @admin.register(Doctor)
@@ -60,60 +92,44 @@ class InseminatorAdmin(admin.ModelAdmin):
 
 
 @admin.register(Message)
-class MessageAdmin(admin.ModelAdmin):
+class MessageAdmin(SoftDeleteAdmin):
     list_display = ("farm", "cow", "message_type", "sent_date", "is_sent")
     search_fields = ("farm__farm_id", "cow__cow_id", "message_text")
     list_filter = ("message_type", "is_sent", "sent_date")
-
-    # Optimize queries to prevent N+1 problem
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related("farm", "cow")
+    select_related_fields = ["farm", "cow"]
 
 
 @admin.register(MedicalAssessment)
-class MedicalAssessmentAdmin(admin.ModelAdmin):
+class MedicalAssessmentAdmin(SoftDeleteAdmin):
     list_display = ("farm", "cow", "assessed_by", "assessment_date", "is_cow_sick")
     search_fields = ("farm__farm_id", "cow__cow_id", "assessed_by__name")
     list_filter = ("is_cow_sick", "sickness_type", "is_cow_vaccinated", "has_deworming")
     date_hierarchy = "assessment_date"
-
-    # Optimize queries to prevent N+1 problem
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related(
-            "farm", "cow", "assessed_by", "general_health", "udder_health", "mastitis"
-        )
+    select_related_fields = [
+        "farm", "cow", "assessed_by", "general_health", "udder_health", "mastitis",
+    ]
 
 
 @admin.register(InseminationRecord)
-class InseminationRecordAdmin(admin.ModelAdmin):
+class InseminationRecordAdmin(SoftDeleteAdmin):
     list_display = ("farm", "cow", "inseminator", "is_inseminated", "recorded_date")
     search_fields = ("farm__farm_id", "cow__cow_id", "inseminator__name")
     list_filter = ("is_inseminated",)
     date_hierarchy = "recorded_date"
-
-    # Optimize queries to prevent N+1 problem
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related("farm", "cow", "inseminator")
+    select_related_fields = ["farm", "cow", "inseminator"]
 
 
 @admin.register(FarmerMedicalReport)
-class FarmerMedicalReportAdmin(admin.ModelAdmin):
+class FarmerMedicalReportAdmin(SoftDeleteAdmin):
     list_display = ("farm", "cow", "reported_date", "is_reviewed")
     search_fields = ("farm__farm_id", "cow__cow_id", "sickness_description")
     list_filter = ("is_reviewed",)
     date_hierarchy = "reported_date"
-
-    # Optimize queries to prevent N+1 problem
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related("farm", "cow", "reviewed_by")
+    select_related_fields = ["farm", "cow", "reviewed_by"]
 
 
 @admin.register(Reproduction)
-class ReproductionAdmin(admin.ModelAdmin):
+class ReproductionAdmin(SoftDeleteAdmin):
     list_display = (
         "cow",
         "farm",
@@ -124,11 +140,7 @@ class ReproductionAdmin(admin.ModelAdmin):
     )
     search_fields = ("cow__cow_id", "farm__farm_id")
     list_filter = ("is_cow_pregnant", "calving_date")
-
-    # Optimize queries to prevent N+1 problem
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related("farm", "cow")
+    select_related_fields = ["farm", "cow"]
 
 
 # Register choice models

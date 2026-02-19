@@ -489,6 +489,45 @@ class CowCreateUpdateSerializer(serializers.ModelSerializer):
             if cow_id:
                 validated_data["cow_id"] = cow_id
 
+                # Check if a soft-deleted cow exists with the same ID
+                existing_deleted = Cow.objects.deleted().filter(
+                    farm=farm, cow_id=cow_id
+                ).first()
+                if existing_deleted:
+                    # Extract non-Cow fields before restoring
+                    non_cow_fields = [
+                        "has_lameness", "reproductive_health", "metabolic_disease",
+                        "is_vaccinated", "vaccination_date", "vaccination_type",
+                        "deworming_date", "deworming_type", "has_deworming",
+                        "is_pregnant", "heat_start_date", "heat_end_date", "heat_signs",
+                    ]
+                    medical_fields = {}
+                    reproduction_fields = {}
+                    heat_fields = {}
+                    for field in non_cow_fields:
+                        if field in validated_data:
+                            val = validated_data.pop(field)
+                            if field in ["is_pregnant"]:
+                                reproduction_fields[field] = val
+                            elif field in ["heat_start_date", "heat_end_date", "heat_signs"]:
+                                heat_fields[field] = val
+                            else:
+                                medical_fields[field] = val
+
+                    # Restore and update the soft-deleted cow
+                    existing_deleted.is_deleted = False
+                    for attr, value in validated_data.items():
+                        if attr != "farm":
+                            setattr(existing_deleted, attr, value)
+                    existing_deleted.save()
+
+                    # Store context for perform_create
+                    self.context["restored"] = True
+                    self.context["medical_fields"] = medical_fields
+                    self.context["reproduction_fields"] = reproduction_fields
+                    self.context["heat_fields"] = heat_fields
+                    return existing_deleted
+
             # Extract non-Cow model fields for later use
             medical_fields = {}
             reproduction_fields = {}
