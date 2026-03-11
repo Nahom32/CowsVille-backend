@@ -70,8 +70,8 @@ ALTER USER farmuser CREATEDB;
 ### 6. Run Migrations
 
 ```bash
-python manage.py migrate
-python manage.py populate_choices
+python3 manage.py migrate
+python3 manage.py populate_choices
 ```
 
 ### 7. Create Superuser
