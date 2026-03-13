@@ -84,10 +84,10 @@ python manage.py createsuperuser
 
 ```bash
 # With DEBUG=True (local development)
-python manage.py runserver
+python3 manage.py runserver
 
 # With DEBUG=False (testing production settings)
-python manage.py runserver --insecure
+python3 manage.py runserver --insecure
 ```
 
 ### 9. Access Application
