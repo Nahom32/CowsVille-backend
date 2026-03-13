@@ -15,7 +15,7 @@ SENDER_NAME = os.getenv("AFROMESSAGE_SENDER_NAME", "Cowsville")  # Optional send
 # Development mode - don't require API token
 if not API_TOKEN:
     logging.warning(
-        "⚠️ Development mode: AFROMESSAGE_API_TOKEN not set. SMS sending is disabled."
+        "Development mode: AFROMESSAGE_API_TOKEN not set. SMS sending is disabled."
     )
     API_TOKEN = "development_token"
 
@@ -61,14 +61,14 @@ def send_alert(phone_number, message):
         if response.status_code == 200:
             json_response = response.json()
             if json_response.get("acknowledge") == "success":
-                logging.info(f"✅ SMS sent successfully to {phone_number}")
+                logging.info(f"SMS sent successfully to {phone_number}")
                 return {"status": "success", "response": json_response}
             else:
-                logging.error(f"❌ API error: {json_response}")
+                logging.error(f"API error: {json_response}")
                 return {"status": "error", "response": json_response}
         else:
             logging.error(
-                f"❌ HTTP error: Code {response.status_code}, Message: {response.text}"
+                f"HTTP error: Code {response.status_code}, Message: {response.text}"
             )
             return {
                 "status": "http_error",
@@ -77,5 +77,5 @@ def send_alert(phone_number, message):
             }
 
     except requests.RequestException as e:
-        logging.error(f"❌ Network error: {str(e)}")
+        logging.error(f"Network error: {str(e)}")
         return {"status": "network_error", "message": str(e)}

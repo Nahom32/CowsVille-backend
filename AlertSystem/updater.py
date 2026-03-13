@@ -60,12 +60,12 @@ def check_heat_sign_alerts():
                         )
                         alert_count += 1
                         logger.info(
-                            f"✅ Heat monitoring alert sent for Cow {cow_reproduction.cow.cow_id} "
+                            f"Heat monitoring alert sent for Cow {cow_reproduction.cow.cow_id} "
                             f"({days_since_last_heat} days since last heat)"
                         )
                     else:
                         logger.error(
-                            f"❌ Failed to send heat alert for Cow {cow_reproduction.cow.cow_id}: "
+                            f"Failed to send heat alert for Cow {cow_reproduction.cow.cow_id}: "
                             f"{alert_response.get('message')}"
                         )
 
@@ -143,12 +143,12 @@ def check_pregnancy_alerts():
                     }
 
                     logger.info(
-                        f"✅ {alert_description[alert_type]} sent for Cow {cow_reproduction.cow.cow_id} "
+                        f"{alert_description[alert_type]} sent for Cow {cow_reproduction.cow.cow_id} "
                         f"(due in {days_until_calving} days)"
                     )
                 else:
                     logger.error(
-                        f"❌ Failed to send pregnancy alert for Cow {cow_reproduction.cow.cow_id}: "
+                        f"Failed to send pregnancy alert for Cow {cow_reproduction.cow.cow_id}: "
                         f"{alert_response.get('message')}"
                     )
 
@@ -168,7 +168,7 @@ def run_daily_checks():
     # Run pregnancy monitoring alerts for pregnant cows
     pregnancy_result = check_pregnancy_alerts()
 
-    logger.info("✅ Daily farm monitoring checks completed")
-    logger.info(f"📊 Summary - Heat: {heat_result} | Pregnancy: {pregnancy_result}")
+    logger.info("Daily farm monitoring checks completed")
+    logger.info(f"Summary - Heat: {heat_result} | Pregnancy: {pregnancy_result}")
 
     return f"Daily checks completed - {heat_result} | {pregnancy_result}"

@@ -70,8 +70,8 @@ ALTER USER farmuser CREATEDB;
 ### 6. Run Migrations
 
 ```bash
-python manage.py migrate
-python manage.py populate_choices
+python3 manage.py migrate
+python3 manage.py populate_choices
 ```
 
 ### 7. Create Superuser
@@ -84,10 +84,10 @@ python manage.py createsuperuser
 
 ```bash
 # With DEBUG=True (local development)
-python manage.py runserver
+python3 manage.py runserver
 
 # With DEBUG=False (testing production settings)
-python manage.py runserver --insecure
+python3 manage.py runserver --insecure
 ```
 
 ### 9. Access Application
