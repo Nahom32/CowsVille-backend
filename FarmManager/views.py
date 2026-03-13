@@ -167,6 +167,106 @@ class FarmViewSet(viewsets.ModelViewSet, LoggingMixin):
             )
             return Response(error_response, status=error_status)
 
+    @action(detail=False, methods=["GET"])
+    def deleted(self, request):
+        """List all soft-deleted farms"""
+        self.log_request_received("list deleted farms")
+        try:
+            deleted_farms = Farm.objects.deleted().select_related(
+                "type_of_housing", "type_of_floor", "source_of_water",
+                "rate_of_cow_feeding", "rate_of_water_giving",
+                "inseminator", "doctor",
+            )
+            serializer = FarmSerializer(deleted_farms, many=True)
+            self.log_operation_success(
+                "retrieved", f"{len(serializer.data)} deleted farms"
+            )
+            return Response(
+                {
+                    "total_deleted": len(serializer.data),
+                    "farms": serializer.data,
+                }
+            )
+        except Exception as e:
+            self.log_operation_error("listing deleted farms", e)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=["POST"])
+    def restore(self, request, pk=None):
+        """Restore a soft-deleted farm"""
+        self.log_request_received(f"restore farm {pk}")
+        try:
+            farm = Farm.objects.deleted().get(pk=pk)
+            farm.is_deleted = False
+            farm.save()
+            self.log_operation_success("restored farm", farm.farm_id)
+            serializer = FarmSerializer(farm)
+            return Response(
+                {
+                    "message": f"Farm {farm.farm_id} restored successfully",
+                    "farm": serializer.data,
+                }
+            )
+        except Farm.DoesNotExist:
+            return Response(
+                {"error": f"No deleted farm found with ID {pk}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            self.log_operation_error(f"restoring farm {pk}", e)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=["DELETE"])
+    def hard_delete(self, request, pk=None):
+        """Permanently delete a farm and all related records"""
+        self.log_request_received(f"hard delete farm {pk}")
+        try:
+            farm = Farm.objects.all_with_deleted().get(pk=pk)
+            farm_id = farm.farm_id
+
+            with transaction.atomic():
+                # Get all cows in this farm (including deleted)
+                cows = Cow.objects.all_with_deleted().filter(farm=farm)
+
+                # Delete all related records for each cow
+                for cow in cows:
+                    Reproduction.objects.all_with_deleted().filter(cow=cow).delete()
+                    MedicalAssessment.objects.all_with_deleted().filter(cow=cow).delete()
+                    InseminationRecord.objects.all_with_deleted().filter(cow=cow).delete()
+                    Message.objects.all_with_deleted().filter(cow=cow).delete()
+                    FarmerMedicalReport.objects.all_with_deleted().filter(cow=cow).delete()
+
+                # Delete all cows
+                cows.delete()
+
+                # Hard delete the farm
+                farm.hard_delete()
+
+            self.log_operation_success(
+                "permanently deleted farm",
+                f"{farm_id} and all related records",
+            )
+            return Response(
+                {
+                    "message": f"Farm {farm_id} and all related records permanently deleted",
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Farm.DoesNotExist:
+            return Response(
+                {"error": f"No farm found with ID {pk}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            self.log_operation_error(f"hard deleting farm {pk}", e)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=True, methods=["post"])
     def change_inseminator(self, request, pk=None):
         """Change inseminator for a farm"""
@@ -342,6 +442,102 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
             self.log_operation_error(f"deleting cow {cow_pk}", e)
             raise
 
+    @action(detail=False, methods=["GET"])
+    def deleted(self, request):
+        """List all soft-deleted cows"""
+        self.log_request_received("list deleted cows")
+        try:
+            deleted_cows = Cow.objects.deleted().select_related(
+                "farm", "breed", "gynecological_status"
+            )
+            farm_id = request.query_params.get("farm_id")
+            if farm_id:
+                deleted_cows = deleted_cows.filter(farm__farm_id=farm_id)
+
+            serializer = CowSerializer(deleted_cows, many=True)
+            self.log_operation_success(
+                "retrieved", f"{len(serializer.data)} deleted cows"
+            )
+            return Response(
+                {
+                    "total_deleted": len(serializer.data),
+                    "cows": serializer.data,
+                }
+            )
+        except Exception as e:
+            self.log_operation_error("listing deleted cows", e)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=["POST"])
+    def restore(self, request, pk=None):
+        """Restore a soft-deleted cow"""
+        self.log_request_received(f"restore cow {pk}")
+        try:
+            cow = Cow.objects.deleted().select_related("farm").get(pk=pk)
+            cow.is_deleted = False
+            cow.save()
+            self.log_operation_success("restored cow", cow.cow_id)
+            serializer = CowSerializer(cow)
+            return Response(
+                {
+                    "message": f"Cow {cow.cow_id} restored successfully",
+                    "cow": serializer.data,
+                }
+            )
+        except Cow.DoesNotExist:
+            return Response(
+                {"error": f"No deleted cow found with ID {pk}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            self.log_operation_error(f"restoring cow {pk}", e)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=["DELETE"])
+    def hard_delete(self, request, pk=None):
+        """Permanently delete a cow and all related records"""
+        self.log_request_received(f"hard delete cow {pk}")
+        try:
+            cow = Cow.objects.all_with_deleted().select_related("farm").get(pk=pk)
+            cow_id = cow.cow_id
+            farm_id = cow.farm.farm_id
+
+            with transaction.atomic():
+                # Delete related records first
+                Reproduction.objects.all_with_deleted().filter(cow=cow).delete()
+                MedicalAssessment.objects.all_with_deleted().filter(cow=cow).delete()
+                InseminationRecord.objects.all_with_deleted().filter(cow=cow).delete()
+                Message.objects.all_with_deleted().filter(cow=cow).delete()
+                FarmerMedicalReport.objects.all_with_deleted().filter(cow=cow).delete()
+
+                # Hard delete the cow
+                cow.hard_delete()
+
+            self.log_operation_success(
+                "permanently deleted cow",
+                f"{cow_id} from farm {farm_id} and all related records",
+            )
+            return Response(
+                {
+                    "message": f"Cow {cow_id} and all related records permanently deleted",
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Cow.DoesNotExist:
+            return Response(
+                {"error": f"No cow found with ID {pk}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            self.log_operation_error(f"hard deleting cow {pk}", e)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     def list(self, request, *args, **kwargs):
         """List cows with logging"""
         self.log_request_received("cow list", f"query params: {request.query_params}")
@@ -418,10 +614,67 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
             )
             raise
 
+    def perform_update(self, serializer):
+        """Override perform_update to handle reproduction and medical side-effects"""
+        try:
+            with transaction.atomic():
+                cow = serializer.save()
+                self.log_operation_success(
+                    "updated cow", f"{cow.cow_id} for farm {cow.farm.farm_id}"
+                )
+
+                # Check if reproduction fields were sent in the update
+                reproduction_fields = serializer.context.get("reproduction_fields", {})
+                heat_fields = serializer.context.get("heat_fields", {})
+
+                if reproduction_fields or heat_fields:
+                    self._update_reproduction_record(cow, serializer)
+
+        except Exception as e:
+            self.log_operation_error(
+                "updating cow with side-effect records", e
+            )
+            raise
+
+    def _update_reproduction_record(self, cow, serializer):
+        """Update or create reproduction record during cow update"""
+        reproduction_fields = serializer.context.get("reproduction_fields", {})
+        heat_fields = serializer.context.get("heat_fields", {})
+
+        # Get or create reproduction record for this cow
+        reproduction, created = Reproduction.objects.get_or_create(
+            cow=cow,
+            farm=cow.farm,
+            defaults={"is_cow_pregnant": False},
+        )
+
+        # Update pregnancy status if provided
+        if "is_pregnant" in reproduction_fields:
+            is_pregnant = ValidationService.convert_yes_no_to_boolean(
+                reproduction_fields["is_pregnant"]
+            )
+            reproduction.is_cow_pregnant = is_pregnant
+
+        # Update heat sign fields if provided
+        if "heat_start_date" in heat_fields:
+            reproduction.heat_sign_start = heat_fields["heat_start_date"]
+        if "heat_end_date" in heat_fields:
+            reproduction.heat_sign_end = heat_fields["heat_end_date"]
+        if "heat_signs" in heat_fields:
+            reproduction.heat_signs_seen = heat_fields["heat_signs"]
+
+        reproduction.save()
+
+        action = "created" if created else "updated"
+        self.log_operation_success(
+            f"{action} reproduction record", f"for cow {cow.cow_id}"
+        )
+
     def _create_reproduction_record(self, cow, serializer):
         """Create reproduction record for the cow"""
         medical_fields = serializer.context.get("medical_fields", {})
         reproduction_fields = serializer.context.get("reproduction_fields", {})
+        heat_fields = serializer.context.get("heat_fields", {})
 
         # Convert is_pregnant from yes/no to boolean if present
         is_pregnant = ValidationService.convert_yes_no_to_boolean(
@@ -435,9 +688,9 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
             is_cow_pregnant=is_pregnant,
             pregnancy_date=serializer.validated_data.get("last_date_insemination"),
             calving_date=serializer.validated_data.get("last_calving_date"),
-            heat_sign_start=serializer.validated_data.get("heat_start_date", None),
-            heat_sign_end=serializer.validated_data.get("heat_end_date", None),
-            heat_signs_seen=serializer.validated_data.get("heat_signs", None),
+            heat_sign_start=heat_fields.get("heat_start_date", None),
+            heat_sign_end=heat_fields.get("heat_end_date", None),
+            heat_signs_seen=heat_fields.get("heat_signs", None),
         )
         self.log_operation_success(
             "created reproduction record", f"for cow {cow.cow_id}"

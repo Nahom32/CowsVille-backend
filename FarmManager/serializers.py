@@ -489,6 +489,45 @@ class CowCreateUpdateSerializer(serializers.ModelSerializer):
             if cow_id:
                 validated_data["cow_id"] = cow_id
 
+                # Check if a soft-deleted cow exists with the same ID
+                existing_deleted = Cow.objects.deleted().filter(
+                    farm=farm, cow_id=cow_id
+                ).first()
+                if existing_deleted:
+                    # Extract non-Cow fields before restoring
+                    non_cow_fields = [
+                        "has_lameness", "reproductive_health", "metabolic_disease",
+                        "is_vaccinated", "vaccination_date", "vaccination_type",
+                        "deworming_date", "deworming_type", "has_deworming",
+                        "is_pregnant", "heat_start_date", "heat_end_date", "heat_signs",
+                    ]
+                    medical_fields = {}
+                    reproduction_fields = {}
+                    heat_fields = {}
+                    for field in non_cow_fields:
+                        if field in validated_data:
+                            val = validated_data.pop(field)
+                            if field in ["is_pregnant"]:
+                                reproduction_fields[field] = val
+                            elif field in ["heat_start_date", "heat_end_date", "heat_signs"]:
+                                heat_fields[field] = val
+                            else:
+                                medical_fields[field] = val
+
+                    # Restore and update the soft-deleted cow
+                    existing_deleted.is_deleted = False
+                    for attr, value in validated_data.items():
+                        if attr != "farm":
+                            setattr(existing_deleted, attr, value)
+                    existing_deleted.save()
+
+                    # Store context for perform_create
+                    self.context["restored"] = True
+                    self.context["medical_fields"] = medical_fields
+                    self.context["reproduction_fields"] = reproduction_fields
+                    self.context["heat_fields"] = heat_fields
+                    return existing_deleted
+
             # Extract non-Cow model fields for later use
             medical_fields = {}
             reproduction_fields = {}
@@ -512,12 +551,19 @@ class CowCreateUpdateSerializer(serializers.ModelSerializer):
             if "is_pregnant" in validated_data:
                 reproduction_fields["is_pregnant"] = validated_data.pop("is_pregnant")
 
+            # Extract heat sign fields (belong to Reproduction, not Cow model)
+            heat_fields = {}
+            for field in ["heat_start_date", "heat_end_date", "heat_signs"]:
+                if field in validated_data:
+                    heat_fields[field] = validated_data.pop(field)
+
             # Create the cow instance with only valid Cow model fields
             instance = super().create(validated_data)
 
             # Save extracted data in view's perform_create method
             self.context["medical_fields"] = medical_fields
             self.context["reproduction_fields"] = reproduction_fields
+            self.context["heat_fields"] = heat_fields
 
             return instance
         except Farm.DoesNotExist:
@@ -526,6 +572,51 @@ class CowCreateUpdateSerializer(serializers.ModelSerializer):
             )
         except Exception as e:
             raise serializers.ValidationError(f"Error creating cow: {str(e)}")
+
+    def update(self, instance, validated_data):
+        """Update cow and extract side-effect fields into context"""
+        # Pop farm_id and cow_id if present (not updatable)
+        validated_data.pop("farm_id", None)
+        validated_data.pop("cow_id", None)
+
+        # Extract non-Cow model fields for side-effect handling
+        medical_fields = {}
+        reproduction_fields = {}
+
+        # Fields for Medical Assessment
+        for field in [
+            "has_lameness",
+            "reproductive_health",
+            "metabolic_disease",
+            "is_vaccinated",
+            "vaccination_date",
+            "vaccination_type",
+            "deworming_date",
+            "deworming_type",
+            "has_deworming",
+        ]:
+            if field in validated_data:
+                medical_fields[field] = validated_data.pop(field)
+
+        # Fields for Reproduction
+        if "is_pregnant" in validated_data:
+            reproduction_fields["is_pregnant"] = validated_data.pop("is_pregnant")
+
+        # Extract heat sign fields (belong to Reproduction, not Cow model)
+        heat_fields = {}
+        for field in ["heat_start_date", "heat_end_date", "heat_signs"]:
+            if field in validated_data:
+                heat_fields[field] = validated_data.pop(field)
+
+        # Update the cow instance with only valid Cow model fields
+        instance = super().update(instance, validated_data)
+
+        # Save extracted data for view's perform_update method
+        self.context["medical_fields"] = medical_fields
+        self.context["reproduction_fields"] = reproduction_fields
+        self.context["heat_fields"] = heat_fields
+
+        return instance
 
 
 class DoctorSerializer(BasePhoneNumberMixin, serializers.ModelSerializer):
