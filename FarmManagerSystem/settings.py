@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     # "unfold.contrib.import_export",
     # "unfold.contrib.guardian",
     # "unfold.contrib.simple_history",
+    "daphne",
     "django.contrib.admin",
     "FarmManager",
     "django.contrib.auth",
@@ -61,6 +62,7 @@ INSTALLED_APPS = [
     "drf_yasg",
     "corsheaders",
     "django_filters",
+    "channels",
     "AlertSystem",
 ]
 
@@ -83,7 +85,7 @@ ENABLE_REQUEST_TIMEOUT = True  # Enable/disable request timeout middleware
 SLOW_REQUEST_THRESHOLD = 2.0  # Log warning for requests slower than this (seconds)
 QUERY_COUNT_WARNING_THRESHOLD = 20  # Warn if query count exceeds this
 
-CORS_ALLOW_ALL_ORIGINS = True
+#CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
     "https://cowsville-aau-cvma.com",
@@ -119,6 +121,14 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "FarmManagerSystem.wsgi.application"
+ASGI_APPLICATION = "FarmManagerSystem.asgi.application"
+
+# Channels configuration
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    }
+}
 
 
 # Database

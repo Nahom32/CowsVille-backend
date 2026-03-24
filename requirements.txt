@@ -43,5 +43,10 @@ requests>=2.31.0
 # Logging
 python-json-logger>=2.0.7
 
+# WebSocket/ASGI support
+channels>=4.0.0
+channels-redis>=4.1.0
+daphne>=4.0.0
+
 # WSGI Server (for production)
 gunicorn>=21.2.0
