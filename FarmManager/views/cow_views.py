@@ -12,6 +12,7 @@ from FarmManager.models import Cow, FarmerMedicalReport, GeneralHealthStatus, In
 from FarmManager.permissions import AdminGetOnlyPermission
 from FarmManager.serializers import CowCreateUpdateSerializer, CowSerializer, DoctorMedicalAssessmentSerializer, FarmerMedicalAssessmentSerializer, HeatSignRecordSerializer, MonitorBirthSerializer, MonitorHeatSignSerializer, MonitorPregnancySerializer
 from FarmManager.services import HealthService, LoggingMixin, MessagingService, ResponseService, ValidationService
+from FarmManager.notifications.services import NotificationService
 from django.utils.timezone import now
 class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
     queryset = Cow.objects.select_related(
@@ -417,10 +418,19 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
                 cow, heat_signs, heat_start_time, heat_sign_recorded_at
             )
 
-            # Send notifications using messaging service
+            # Send SMS notifications using messaging service
             notification_results = MessagingService.send_heat_sign_notifications(
                 cow, heat_signs
             )
+
+            # Send WebSocket notifications to inseminator
+            if cow.farm.inseminator and cow.farm.inseminator.user_id:
+                NotificationService.notify_heat_sign(
+                    cow_id=cow.id,
+                    cow_name=cow.cow_id,
+                    farm_name=cow.farm.farm_id,
+                    inseminator_ids=[cow.farm.inseminator.user_id],
+                )
 
             self.log_operation_success(
                 "recorded heat sign",
@@ -533,7 +543,7 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
                     validated_data["lactation_number"],
                 )
 
-                # Send notification and create message record
+                # Send SMS notification and create message record
                 MessagingService.send_notification_with_message_record(
                     cow.farm.telephone_number,
                     farmer_message,
@@ -542,6 +552,15 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
                     cow,
                     f"Pregnancy confirmation for cow {cow.cow_id}:",
                 )
+
+                # Send WebSocket notification to farmer
+                if cow.farm.user_id:
+                    NotificationService.notify_pregnancy_confirmed(
+                        cow_id=cow.id,
+                        cow_name=cow.cow_id,
+                        farm_name=cow.farm.farm_id,
+                        farmer_user_ids=[cow.farm.user_id],
+                    )
 
                 self.log_operation_success(
                     "updated pregnancy status", f"for cow {cow.cow_id}"
@@ -605,6 +624,15 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
                         cow,
                         f"Doctor medical report alert for cow {cow.cow_id}:",
                     )
+
+                    # Send WebSocket notification to doctor
+                    if cow.farm.doctor.user_id:
+                        NotificationService.notify_medical_report(
+                            cow_id=cow.id,
+                            cow_name=cow.cow_id,
+                            farm_name=cow.farm.farm_id,
+                            doctor_ids=[cow.farm.doctor.user_id],
+                        )
 
                 # Send confirmation to farmer using message template
                 doctor_name = (
@@ -718,6 +746,15 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
                     cow,
                     f"Medical assessment complete for cow {cow.cow_id}:",
                 )
+
+                # Send WebSocket notification to farmer
+                if cow.farm.user_id:
+                    NotificationService.notify_doctor_assessment(
+                        cow_id=cow.id,
+                        cow_name=cow.cow_id,
+                        farm_name=cow.farm.farm_id,
+                        farmer_user_ids=[cow.farm.user_id],
+                    )
 
                 # Send confirmation to doctor using message template
                 doctor_confirmation = MessageTemplates.doctor_assessment_confirmation(
@@ -841,6 +878,17 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
                     f"Heat monitoring inseminator alert for cow {cow.cow_id}:",
                 )
 
+                # Send WebSocket notifications
+                if validated_data["is_inseminated"]:
+                    # Notify farmer about insemination
+                    if cow.farm.user_id:
+                        NotificationService.notify_insemination(
+                            cow_id=cow.id,
+                            cow_name=cow.cow_id,
+                            farm_name=cow.farm.farm_id,
+                            farmer_user_ids=[cow.farm.user_id],
+                        )
+
                 self.log_operation_success(
                     "recorded heat sign monitoring", f"for cow {cow.cow_id}"
                 )
@@ -913,6 +961,19 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
                     cow,
                     f"Birth event notification for cow {cow.cow_id}:",
                 )
+
+                # Send WebSocket notifications to farmer and doctor
+                farmer_ids = [cow.farm.user_id] if cow.farm.user_id else []
+                doctor_ids = [cow.farm.doctor.user_id] if cow.farm.doctor and cow.farm.doctor.user_id else []
+                all_user_ids = farmer_ids + doctor_ids
+                if all_user_ids:
+                    NotificationService.notify_calving(
+                        cow_id=cow.id,
+                        cow_name=cow.cow_id,
+                        farm_name=cow.farm.farm_id,
+                        farmer_user_ids=farmer_ids,
+                        doctor_ids=doctor_ids,
+                    )
 
                 self.log_operation_success(
                     "recorded birth event", f"for cow {cow.cow_id}"

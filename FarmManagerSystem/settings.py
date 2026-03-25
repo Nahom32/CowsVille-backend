@@ -249,6 +249,16 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
+        "FarmManager.notifications": {
+            "handlers": ["console", "file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "daphne": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
     "root": {
         "handlers": ["console"],

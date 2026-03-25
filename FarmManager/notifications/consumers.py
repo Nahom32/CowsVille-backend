@@ -1,12 +1,25 @@
 import json
+import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.user = self.scope.get("user")
+        logger.warning("[WS] WebSocket connect attempt")
+        logger.warning(f"[WS] Scope: {self.scope}")
 
-        if self.user and self.user.is_authenticated:
+        self.user = self.scope.get("user")
+        session = self.scope.get("session")
+        headers = dict(self.scope.get("headers", []))
+
+        logger.warning(f"[WS] User from scope: {self.user}")
+        logger.warning(f"[WS] User is_authenticated: {getattr(self.user, 'is_authenticated', 'N/A')}")
+        logger.warning(f"[WS] Session: {session}")
+        logger.warning(f"[WS] Headers: {headers}")
+
+        if self.user and getattr(self.user, 'is_authenticated', False):
             self.user_group = f"user_{self.user.id}"
             await self.channel_layer.group_add(self.user_group, self.channel_name)
             await self.accept()
@@ -16,10 +29,13 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                     "message": "Connected to notification server",
                 })
             )
+            logger.warning(f"[WS] Connection ACCEPTED for user {self.user.id}")
         else:
+            logger.warning("[WS] Connection REJECTED - no authenticated user")
             await self.close(code=4001)
 
     async def disconnect(self, close_code):
+        logger.warning(f"[WS] Disconnecting with code: {close_code}")
         if hasattr(self, "user_group"):
             await self.channel_layer.group_discard(self.user_group, self.channel_name)
 

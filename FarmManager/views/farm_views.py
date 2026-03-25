@@ -13,6 +13,7 @@ from ..models import Farm, Inseminator, Doctor
 from ..serializers import FarmSerializer, InseminatorAssignmentSerializer, DoctorAssignmentSerializer
 from ..constants import APIMessages, MessageTypes
 from ..services import MessagingService, LoggingMixin, ResponseService
+from FarmManager.notifications.services import NotificationService
 from ..permissions import AdminGetOnlyPermission
 
 logger = logging.getLogger(__name__)
@@ -311,6 +312,19 @@ class FarmViewSet(viewsets.ModelViewSet, LoggingMixin):
                 notification_results = MessagingService.send_staff_change_notifications(
                     farm, staff_type, old_staff, new_staff, message_type
                 )
+
+                # Send WebSocket notifications to affected staff
+                affected_user_ids = []
+                if old_staff and old_staff.user_id:
+                    affected_user_ids.append(old_staff.user_id)
+                if new_staff.user_id:
+                    affected_user_ids.append(new_staff.user_id)
+                if affected_user_ids:
+                    NotificationService.notify_staff_changed(
+                        farm_name=farm.farm_id,
+                        staff_type=staff_type,
+                        affected_user_ids=affected_user_ids,
+                    )
 
                 logger.info(
                     f"Successfully completed the {staff_type} change process for farm {farm.farm_id}"

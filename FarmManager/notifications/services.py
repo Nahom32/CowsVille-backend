@@ -68,7 +68,10 @@ class NotificationService:
         data: dict = None,
     ) -> list[Notification]:
         notifications = []
-        for user_id in user_ids:
+        valid_user_ids = [uid for uid in user_ids if uid]
+        if not valid_user_ids:
+            return notifications
+        for user_id in valid_user_ids:
             notification = cls.notify_user(
                 user_id=user_id,
                 event_type=event_type,
@@ -81,7 +84,7 @@ class NotificationService:
         return notifications
 
     @classmethod
-    def notify_heat_sign(cls, cow_id: int, cow_name: str, farm_name: str, inseminator_ids: list[int]):
+    def notify_heat_sign(cls, cow_id, cow_name: str, farm_name: str, inseminator_ids: list[int]):
         title = "Heat Sign Detected"
         message = f"Cow '{cow_name}' at {farm_name} is showing heat signs. Please schedule insemination."
         data = {"cow_id": cow_id, "farm_name": farm_name}
@@ -95,7 +98,7 @@ class NotificationService:
         )
 
     @classmethod
-    def notify_pregnancy_confirmed(cls, cow_id: int, cow_name: str, farm_name: str, farmer_user_ids: list[int]):
+    def notify_pregnancy_confirmed(cls, cow_id, cow_name: str, farm_name: str, farmer_user_ids: list[int]):
         title = "Pregnancy Confirmed"
         message = f"Cow '{cow_name}' at {farm_name} has been confirmed pregnant."
         data = {"cow_id": cow_id, "farm_name": farm_name}
@@ -126,7 +129,7 @@ class NotificationService:
 
     @classmethod
     def notify_doctor_assessment(
-        cls, cow_id: int, cow_name: str, farm_name: str, farmer_user_ids: list[int]
+        cls, cow_id, cow_name: str, farm_name: str, farmer_user_ids: list[int]
     ):
         title = "Doctor Assessment Completed"
         message = f"A doctor has completed the assessment for cow '{cow_name}' at {farm_name}."
@@ -142,7 +145,7 @@ class NotificationService:
 
     @classmethod
     def notify_insemination(
-        cls, cow_id: int, cow_name: str, farm_name: str, farmer_user_ids: list[int]
+        cls, cow_id, cow_name: str, farm_name: str, farmer_user_ids: list[int]
     ):
         title = "Insemination Recorded"
         message = f"Insemination has been recorded for cow '{cow_name}' at {farm_name}."
@@ -158,7 +161,7 @@ class NotificationService:
 
     @classmethod
     def notify_calving(
-        cls, cow_id: int, cow_name: str, farm_name: str, farmer_user_ids: list[int], doctor_ids: list[int]
+        cls, cow_id, cow_name: str, farm_name: str, farmer_user_ids: list[int], doctor_ids: list[int]
     ):
         title = "Calving/Birth Recorded"
         message = f"A calving event has been recorded for cow '{cow_name}' at {farm_name}."
