@@ -38,4 +38,5 @@ router.register(r"insemination-records", InseminationRecordViewSet)
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("notifications/", include("FarmManager.notifications.urls")),
 ]

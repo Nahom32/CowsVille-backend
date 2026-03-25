@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_filters",
     "channels",
+    "FarmManager.notifications",
     "AlertSystem",
 ]
 

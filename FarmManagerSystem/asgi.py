@@ -18,11 +18,13 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "FarmManagerSystem.settings")
 
 django_asgi_app = get_asgi_application()
 
+from FarmManager.notifications.routing import websocket_urlpatterns
+
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         "websocket": AllowedHostsOriginValidator(
-            AuthMiddlewareStack(URLRouter([]))
+            AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
         ),
     }
 )
