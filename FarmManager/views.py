@@ -39,6 +39,13 @@ from .models import (BreedType, Cow, Doctor, Farm, FarmerMedicalReport,
                      GynecologicalStatus, HousingType, InseminationRecord,
                      Inseminator, MastitisStatus, Message, Reproduction,
                      UdderHealthStatus, WaterSource)
+from django.contrib.auth import authenticate
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+
+from rest_framework.views import APIView
+
 from .permissions import AdminGetOnlyPermission, ReadOnlyAdminPermission
 from .serializers import (BreedTypeSerializer, CowCreateUpdateSerializer,
                           CowSerializer, DoctorAssignmentSerializer,
@@ -1569,3 +1576,60 @@ class DoctorViewSet(viewsets.ModelViewSet, LoggingMixin):
     def perform_update(self, serializer):
         doctor = serializer.save()
         self.log_operation_success("updated doctor", f"{doctor.name} (ID: {doctor.id})")
+
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = request.data.get("username")
+        password = request.data.get("password")
+
+        if not username or not password:
+            return Response(
+                {"error": "Username and password are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = authenticate(username=username, password=password)
+        if not user:
+            return Response(
+                {"error": "Invalid credentials"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        token, _ = Token.objects.get_or_create(user=user)
+
+        farm = Farm.objects.first()
+
+        role = "farmer"
+        doctor_id = None
+        inseminator_id = None
+
+        if hasattr(user, 'doctor_profile') and user.doctor_profile:
+            role = "doctor"
+            doctor_id = user.doctor_profile.id
+        elif hasattr(user, 'inseminator_profile') and user.inseminator_profile:
+            role = "inseminator"
+            inseminator_id = user.inseminator_profile.id
+
+        user_data = {
+            "id": str(user.id),
+            "firstName": user.first_name,
+            "lastName": user.last_name,
+            "phoneNumber": farm.telephone_number if farm else "",
+            "email": user.email,
+            "role": role,
+            "farm": farm.farm_id if farm else "",
+            "password": "",
+        }
+
+        if doctor_id is not None:
+            user_data["doctor_id"] = doctor_id
+        if inseminator_id is not None:
+            user_data["inseminator_id"] = inseminator_id
+
+        return Response({
+            "token": token.key,
+            "user": user_data,
+        })
