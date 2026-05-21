@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.core.validators import (MaxValueValidator, MinValueValidator,
                                     RegexValidator)
 from django.db import models
@@ -356,6 +357,9 @@ class Inseminator(StaffMember):
 
 
 class Doctor(StaffMember):
+    user = models.OneToOneField(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="doctor_profile"
+    )
     license_number = models.CharField(max_length=50, unique=True)
     specialization = models.CharField(max_length=255, blank=True)
 
