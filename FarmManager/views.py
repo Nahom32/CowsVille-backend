@@ -1351,6 +1351,32 @@ class InseminatorViewSet(viewsets.ModelViewSet):
     serializer_class = InseminatorSerializer
     permission_classes = [AdminGetOnlyPermission]
 
+    def get_permissions(self):
+        if self.action == "dashboard_stat":
+            return [permissions.IsAuthenticated()]
+        return super().get_permissions()
+
+    @action(detail=True, methods=["get"])
+    def dashboard_stat(self, request, pk=None):
+        inseminator = self.get_object()
+        today = timezone.now().date()
+        start_of_month = today.replace(day=1)
+
+        today_records = inseminator.insemination_records.filter(
+            date_of_insemination=today
+        )
+        month_records = inseminator.insemination_records.filter(
+            date_of_insemination__gte=start_of_month
+        )
+        assigned_farms = Farm.objects.filter(inseminator=inseminator)
+
+        return Response({
+            "inseminations_today": today_records.count(),
+            "inseminations_this_month": month_records.count(),
+            "assigned_farms_count": assigned_farms.count(),
+            "total_records": inseminator.insemination_records.count(),
+        })
+
     @action(detail=True, methods=["post"])
     def replace_inseminator(self, request, pk=None):
         try:
