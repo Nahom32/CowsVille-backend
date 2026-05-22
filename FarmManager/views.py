@@ -26,7 +26,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 
@@ -1319,7 +1319,7 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
 class MessageViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Message.objects.select_related("farm", "cow")
     serializer_class = MessageSerializer
-    permission_classes = [ReadOnlyAdminPermission]
+    permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ["message_text", "message_type"]
 
@@ -1327,6 +1327,11 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = Message.objects.select_related("farm", "cow")
         farm_id = self.request.query_params.get("farm_id", None)
         cow_id = self.request.query_params.get("cow_id", None)
+        doctor_id = self.request.query_params.get("doctor_id", None)
+
+        # If doctor_id is provided, return messages for all farms assigned to that doctor
+        if doctor_id:
+            return queryset.filter(farm__doctor_id=doctor_id)
 
         # If only cow_id is provided without farm_id, we can't uniquely identify the cow
         if cow_id and not farm_id:
@@ -1513,7 +1518,7 @@ class MedicalAssessmentViewSet(viewsets.ModelViewSet):
         "farm", "cow", "assessed_by", "general_health", "udder_health", "mastitis"
     )
     serializer_class = MedicalAssessmentSerializer
-    permission_classes = [AdminGetOnlyPermission]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         queryset = MedicalAssessment.objects.select_related(
@@ -1576,6 +1581,54 @@ class DoctorViewSet(viewsets.ModelViewSet, LoggingMixin):
     def perform_update(self, serializer):
         doctor = serializer.save()
         self.log_operation_success("updated doctor", f"{doctor.name} (ID: {doctor.id})")
+
+    def get_permissions(self):
+        if self.action == "dashboard_stat":
+            return [permissions.IsAuthenticated()]
+        return super().get_permissions()
+
+    @action(detail=True, methods=["get"])
+    def dashboard_stat(self, request, pk=None):
+        doctor = self.get_object()
+        today = timezone.now().date()
+        start_of_month = today.replace(day=1)
+
+        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        today_assessments = MedicalAssessment.objects.filter(
+            assessed_by=doctor, assessment_date__gte=today_start
+        )
+        month_assessments = MedicalAssessment.objects.filter(
+            assessed_by=doctor, assessment_date__date__gte=start_of_month
+        )
+        recent = (
+            MedicalAssessment.objects.filter(assessed_by=doctor)
+            .select_related("cow", "farm")
+            .order_by("-assessment_date")[:5]
+        )
+        assigned_farms = Farm.objects.filter(doctor=doctor)
+        total_cows = sum(f.total_number_of_cows for f in assigned_farms)
+        pending_reviews = FarmerMedicalReport.objects.filter(is_reviewed=False).count()
+
+        return Response({
+            "assessments_today": today_assessments.count(),
+            "sick_animals_today": today_assessments.filter(is_cow_sick=True).count(),
+            "pending_reviews_count": pending_reviews,
+            "assessments_this_month": month_assessments.count(),
+            "assigned_farms_count": assigned_farms.count(),
+            "total_cows_count": total_cows,
+            "recent_assessments": [
+                {
+                    "id": a.id,
+                    "cow_id": a.cow.cow_id,
+                    "farm_id": a.farm.farm_id,
+                    "condition": a.sickness_type or "General Check",
+                    "submitted_at": a.assessment_date.isoformat(),
+                    "status": "sick" if a.is_cow_sick else "normal",
+                }
+                for a in recent
+            ],
+        })
 
 
 class LoginView(APIView):
