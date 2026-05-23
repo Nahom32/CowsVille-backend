@@ -21,7 +21,7 @@ import logging
 from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
-from django.utils.timezone import now, timezone
+from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg import openapi
@@ -1359,7 +1359,7 @@ class InseminatorViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def dashboard_stat(self, request, pk=None):
         inseminator = self.get_object()
-        today = timezone.now().date()
+        today = now().date()
         start_of_month = today.replace(day=1)
 
         today_records = inseminator.insemination_records.filter(
@@ -1616,10 +1616,10 @@ class DoctorViewSet(viewsets.ModelViewSet, LoggingMixin):
     @action(detail=True, methods=["get"])
     def dashboard_stat(self, request, pk=None):
         doctor = self.get_object()
-        today = timezone.now().date()
+        today = now().date()
         start_of_month = today.replace(day=1)
 
-        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = now().replace(hour=0, minute=0, second=0, microsecond=0)
 
         today_assessments = MedicalAssessment.objects.filter(
             assessed_by=doctor, assessment_date__gte=today_start
