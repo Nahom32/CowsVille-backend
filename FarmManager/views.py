@@ -46,7 +46,8 @@ from rest_framework.permissions import AllowAny
 
 from rest_framework.views import APIView
 
-from .permissions import AdminGetOnlyPermission, ReadOnlyAdminPermission
+from .permissions import (AdminGetOnlyPermission, InseminatorReadPermission,
+                          ReadOnlyAdminPermission)
 from .serializers import (BreedTypeSerializer, CowCreateUpdateSerializer,
                           CowSerializer, DoctorAssignmentSerializer,
                           DoctorMedicalAssessmentSerializer, DoctorSerializer,
@@ -1570,7 +1571,7 @@ class MedicalAssessmentViewSet(viewsets.ModelViewSet):
 class InseminationRecordViewSet(viewsets.ModelViewSet):
     queryset = InseminationRecord.objects.select_related("farm", "cow", "inseminator")
     serializer_class = InseminationRecordSerializer
-    permission_classes = [AdminGetOnlyPermission]
+    permission_classes = [InseminatorReadPermission]
 
     def get_queryset(self):
         queryset = InseminationRecord.objects.select_related(

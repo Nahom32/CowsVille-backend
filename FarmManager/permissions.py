@@ -34,6 +34,27 @@ class AdminGetOnlyPermission(permissions.BasePermission):
         return True
 
 
+class InseminatorReadPermission(permissions.BasePermission):
+    """
+    Custom permission that allows:
+    - GET requests for authenticated staff, doctors, or inseminators
+    - All other methods are allowed (maintains existing behavior)
+    """
+
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return (
+                request.user
+                and request.user.is_authenticated
+                and (
+                    request.user.is_staff
+                    or hasattr(request.user, "doctor_profile")
+                    or hasattr(request.user, "inseminator_profile")
+                )
+            )
+        return True
+
+
 class ReadOnlyAdminPermission(permissions.BasePermission):
     """
     Permission for read-only viewsets (like choice models) that only allows admin access

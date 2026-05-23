@@ -349,6 +349,10 @@ class StaffMember(SoftDeleteModel):
 
 
 class Inseminator(StaffMember):
+    user = models.OneToOneField(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="inseminator_profile"
+    )
+
     def __str__(self):
         return f"{self.name} - {self.phone_number}"
 
