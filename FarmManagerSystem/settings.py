@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_filters",
     "AlertSystem",
+    "rest_framework.authtoken",
 ]
 
 MIDDLEWARE = [
@@ -124,17 +125,30 @@ WSGI_APPLICATION = "FarmManagerSystem.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST", "localhost"),
-        "PORT": os.getenv("DB_PORT", "5432"),
-        "CONN_MAX_AGE": 60,
+# Database configuration - Use SQLite for development if no PostgreSQL credentials
+if os.getenv("DB_ENGINE") == "django.db.backends.sqlite3" or not os.getenv(
+    "DB_PASSWORD"
+):
+    # SQLite for development
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / os.getenv("DB_NAME", "db.sqlite3"),
+        }
     }
-}
+else:
+    # PostgreSQL for production
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST", "localhost"),
+            "PORT": os.getenv("DB_PORT", "5432"),
+            "CONN_MAX_AGE": 60,
+        }
+    }
 
 # Caching Configuration
 CACHES = {
@@ -252,6 +266,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.BasicAuthentication",
         "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -299,12 +314,11 @@ UNFOLD = {
         "light": "/static/icons/cowsville-logo.svg",
         "dark": "/static/icons/cowsville-logo.svg",
     },
-
     # "THEME": "light",
     "COLLAPSIBLE_SIDEBAR": True,
     "COLORS": {
         "primary": {
-            50:  "#e6f0ff",
+            50: "#e6f0ff",
             100: "#bad3ff",
             200: "#89b9ff",
             300: "#589eff",
@@ -313,17 +327,15 @@ UNFOLD = {
             600: "#0053cc",
             700: "#003d99",
             800: "#002666",
-            900: "#001033"
+            900: "#001033",
         }
     },
-
     "SIDEBAR": {
         "show_search": True,
         "show_all_models": False,
         "show_app_icons": True,
         "icons": {},
     },
-
     "LOGIN": {
         "language_selector": False,
         "logo": {

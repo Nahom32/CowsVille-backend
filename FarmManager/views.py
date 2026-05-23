@@ -21,12 +21,12 @@ import logging
 from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
-from django.utils.timezone import now, timezone
+from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 
@@ -39,7 +39,15 @@ from .models import (BreedType, Cow, Doctor, Farm, FarmerMedicalReport,
                      GynecologicalStatus, HousingType, InseminationRecord,
                      Inseminator, MastitisStatus, Message, Reproduction,
                      UdderHealthStatus, WaterSource)
-from .permissions import AdminGetOnlyPermission, ReadOnlyAdminPermission
+from django.contrib.auth import authenticate
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+
+from rest_framework.views import APIView
+
+from .permissions import (AdminGetOnlyPermission, InseminatorReadPermission,
+                          ReadOnlyAdminPermission)
 from .serializers import (BreedTypeSerializer, CowCreateUpdateSerializer,
                           CowSerializer, DoctorAssignmentSerializer,
                           DoctorMedicalAssessmentSerializer, DoctorSerializer,
@@ -1508,7 +1516,7 @@ class CowViewSet(viewsets.ModelViewSet, LoggingMixin):
 class MessageViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Message.objects.select_related("farm", "cow")
     serializer_class = MessageSerializer
-    permission_classes = [ReadOnlyAdminPermission]
+    permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ["message_text", "message_type"]
 
@@ -1516,6 +1524,11 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = Message.objects.select_related("farm", "cow")
         farm_id = self.request.query_params.get("farm_id", None)
         cow_id = self.request.query_params.get("cow_id", None)
+        doctor_id = self.request.query_params.get("doctor_id", None)
+
+        # If doctor_id is provided, return messages for all farms assigned to that doctor
+        if doctor_id:
+            return queryset.filter(farm__doctor_id=doctor_id)
 
         # If only cow_id is provided without farm_id, we can't uniquely identify the cow
         if cow_id and not farm_id:
@@ -1534,6 +1547,32 @@ class InseminatorViewSet(viewsets.ModelViewSet):
     queryset = Inseminator.objects.all()
     serializer_class = InseminatorSerializer
     permission_classes = [AdminGetOnlyPermission]
+
+    def get_permissions(self):
+        if self.action == "dashboard_stat":
+            return [permissions.IsAuthenticated()]
+        return super().get_permissions()
+
+    @action(detail=True, methods=["get"])
+    def dashboard_stat(self, request, pk=None):
+        inseminator = self.get_object()
+        today = now().date()
+        start_of_month = today.replace(day=1)
+
+        today_records = inseminator.insemination_records.filter(
+            date_of_insemination=today
+        )
+        month_records = inseminator.insemination_records.filter(
+            date_of_insemination__gte=start_of_month
+        )
+        assigned_farms = Farm.objects.filter(inseminator=inseminator)
+
+        return Response({
+            "inseminations_today": today_records.count(),
+            "inseminations_this_month": month_records.count(),
+            "assigned_farms_count": assigned_farms.count(),
+            "total_records": inseminator.insemination_records.count(),
+        })
 
     @action(detail=True, methods=["post"])
     def replace_inseminator(self, request, pk=None):
@@ -1702,7 +1741,7 @@ class MedicalAssessmentViewSet(viewsets.ModelViewSet):
         "farm", "cow", "assessed_by", "general_health", "udder_health", "mastitis"
     )
     serializer_class = MedicalAssessmentSerializer
-    permission_classes = [AdminGetOnlyPermission]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         queryset = MedicalAssessment.objects.select_related(
@@ -1728,7 +1767,7 @@ class MedicalAssessmentViewSet(viewsets.ModelViewSet):
 class InseminationRecordViewSet(viewsets.ModelViewSet):
     queryset = InseminationRecord.objects.select_related("farm", "cow", "inseminator")
     serializer_class = InseminationRecordSerializer
-    permission_classes = [AdminGetOnlyPermission]
+    permission_classes = [InseminatorReadPermission]
 
     def get_queryset(self):
         queryset = InseminationRecord.objects.select_related(
@@ -1765,3 +1804,108 @@ class DoctorViewSet(viewsets.ModelViewSet, LoggingMixin):
     def perform_update(self, serializer):
         doctor = serializer.save()
         self.log_operation_success("updated doctor", f"{doctor.name} (ID: {doctor.id})")
+
+    def get_permissions(self):
+        if self.action == "dashboard_stat":
+            return [permissions.IsAuthenticated()]
+        return super().get_permissions()
+
+    @action(detail=True, methods=["get"])
+    def dashboard_stat(self, request, pk=None):
+        doctor = self.get_object()
+        today = now().date()
+        start_of_month = today.replace(day=1)
+
+        today_start = now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        today_assessments = MedicalAssessment.objects.filter(
+            assessed_by=doctor, assessment_date__gte=today_start
+        )
+        month_assessments = MedicalAssessment.objects.filter(
+            assessed_by=doctor, assessment_date__date__gte=start_of_month
+        )
+        recent = (
+            MedicalAssessment.objects.filter(assessed_by=doctor)
+            .select_related("cow", "farm")
+            .order_by("-assessment_date")[:5]
+        )
+        assigned_farms = Farm.objects.filter(doctor=doctor)
+        total_cows = sum(f.total_number_of_cows for f in assigned_farms)
+        pending_reviews = FarmerMedicalReport.objects.filter(is_reviewed=False).count()
+
+        return Response({
+            "assessments_today": today_assessments.count(),
+            "sick_animals_today": today_assessments.filter(is_cow_sick=True).count(),
+            "pending_reviews_count": pending_reviews,
+            "assessments_this_month": month_assessments.count(),
+            "assigned_farms_count": assigned_farms.count(),
+            "total_cows_count": total_cows,
+            "recent_assessments": [
+                {
+                    "id": a.id,
+                    "cow_id": a.cow.cow_id,
+                    "farm_id": a.farm.farm_id,
+                    "condition": a.sickness_type or "General Check",
+                    "submitted_at": a.assessment_date.isoformat(),
+                    "status": "sick" if a.is_cow_sick else "normal",
+                }
+                for a in recent
+            ],
+        })
+
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = request.data.get("username")
+        password = request.data.get("password")
+
+        if not username or not password:
+            return Response(
+                {"error": "Username and password are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = authenticate(username=username, password=password)
+        if not user:
+            return Response(
+                {"error": "Invalid credentials"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        token, _ = Token.objects.get_or_create(user=user)
+
+        farm = Farm.objects.first()
+
+        role = "farmer"
+        doctor_id = None
+        inseminator_id = None
+
+        if hasattr(user, 'doctor_profile') and user.doctor_profile:
+            role = "doctor"
+            doctor_id = user.doctor_profile.id
+        elif hasattr(user, 'inseminator_profile') and user.inseminator_profile:
+            role = "inseminator"
+            inseminator_id = user.inseminator_profile.id
+
+        user_data = {
+            "id": str(user.id),
+            "firstName": user.first_name,
+            "lastName": user.last_name,
+            "phoneNumber": farm.telephone_number if farm else "",
+            "email": user.email,
+            "role": role,
+            "farm": farm.farm_id if farm else "",
+            "password": "",
+        }
+
+        if doctor_id is not None:
+            user_data["doctor_id"] = doctor_id
+        if inseminator_id is not None:
+            user_data["inseminator_id"] = inseminator_id
+
+        return Response({
+            "token": token.key,
+            "user": user_data,
+        })
