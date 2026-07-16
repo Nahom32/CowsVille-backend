@@ -1,0 +1,61 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+dist/
+build/
+.eggs/
+venv/
+env/
+.venv/
+
+# Django
+staticfiles/
+media/
+logs/
+db.sqlite3
+db.sqlite3-journal
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Documentation
+*.md
+*.rst
+docs/
+
+# Docker files
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Backup files
+*.bak
+*.backup
+*.sql
+
+# Temporary files
+tmp/
+*.tmp
